@@ -1,0 +1,40 @@
+# Bu klasörler asla GitHub'a yüklenmemeli
+/[Ll]ibrary/
+/[Tt]emp/
+/[Oo]bj/
+/[Bb]uild/
+/[Bb]uilds/
+/[Ll]ogs/
+/[Uu]ser[Ss]ettings/
+
+# Hafıza kayıtları
+/[Mm]emoryCaptures/
+
+# Visual Studio ve diğer otomatik oluşturulan gereksiz proje dosyaları
+.vs/
+.gradle/
+ExportedObj/
+.consulo/
+*.csproj
+*.unityproj
+*.sln
+*.suo
+*.tmp
+*.user
+*.userprefs
+*.pidb
+*.booproj
+*.svd
+*.pdb
+*.mdb
+*.opendb
+*.VC.db
+
+# Unity çökme raporları
+sysinfo.txt
+
+# Çıktı dosyaları (APK, vs.)
+*.apk
+*.aab
+*.unitypackage
+*.app
