@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Networking;
 using TMPro;
@@ -24,36 +25,39 @@ public class GameManager : MonoBehaviour
     public Button seyirciBtn;
 
     // GROQ ÞÝFRENÝ BURAYA YAPIÞTIR!
-    private string apiKey = "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";
+    private string apiKey = "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";
 
     private string gecerliDogruCevap = "";
-
-    // --- YENÝ: KAÇINCI SORUDA OLDUÐUMUZU TUTAN DEÐÝÞKEN ---
+    private string aktifSoruMetni = ""; // Soruyu hafýzada tutmak için ekledik
     private int soruSirasi = 1;
-
     private string[] kategoriler = { "Tarih", "Coðrafya", "Uzay Bilimi", "Sinema", "Spor", "Müzik", "Teknoloji", "Biyoloji", "Sanat Tarihi", "Edebiyat" };
+
+    private bool joker50Kullanildi = false;
+    private bool ciftCevapKullanildi = false;
+    private bool seyirciKullanildi = false;
+    private bool ciftCevapHakkiAktif = false;
 
     void Start()
     {
         ButonlariHazirla();
-        soruSirasi = 1; // Oyun baþlarken soruyu 1 yapýyoruz
+        soruSirasi = 1;
         YeniSoruGetir();
     }
 
     public void YeniSoruGetir()
     {
-        // Eðer 10 soruyu da geçtiysek oyunu kazandýk demektir!
         if (soruSirasi > 10)
         {
-            SoruText.text = "?? ÝNANILMAZ! 10 SORUYU DA BÝLDÝN VE KAZANDIN! ??";
+            SoruText.text = "<color=green>?? ÝNANILMAZ! 10 SORUYU DA BÝLDÝN VE KAZANDIN! ??</color>";
             foreach (Button btn in SecenekBtns) btn.interactable = false;
-            return; // Kodun aþaðýya devam etmesini engelliyoruz
+            return;
         }
 
-        SoruText.text = soruSirasi + ". Soru için Groq Yapay Zeka düþünülüyor...";
-        foreach (Button btn in SecenekBtns) btn.interactable = false;
+        ciftCevapHakkiAktif = false;
+        aktifSoruMetni = soruSirasi + ". Soru Hazýrlanýyor...";
+        SoruText.text = aktifSoruMetni;
 
-        // Butonlarýn yazýlarýný da temizleyelim ki güzel görünsün
+        foreach (Button btn in SecenekBtns) btn.interactable = false;
         foreach (TextMeshProUGUI txt in SecenekTexts) txt.text = "...";
 
         StartCoroutine(YapayZekadanSoruCek());
@@ -61,20 +65,11 @@ public class GameManager : MonoBehaviour
 
     IEnumerator YapayZekadanSoruCek()
     {
-        // --- YENÝ: ZORLUK DERECESÝNÝ BELÝRLEME ---
         string zorlukDerecesi = "kolay";
-        if (soruSirasi >= 4 && soruSirasi <= 7)
-        {
-            zorlukDerecesi = "orta";
-        }
-        else if (soruSirasi >= 8)
-        {
-            zorlukDerecesi = "çok zor";
-        }
+        if (soruSirasi >= 4 && soruSirasi <= 7) zorlukDerecesi = "orta";
+        else if (soruSirasi >= 8) zorlukDerecesi = "çok zor";
 
         string rastgeleKategori = kategoriler[Random.Range(0, kategoriler.Length)];
-
-        // Promptumuzu soru sýrasýna ve zorluða göre güncelledik
         string prompt = "Bana " + rastgeleKategori + " kategorisinde 1 tane " + zorlukDerecesi + " seviye bilgi yarýþmasý sorusu ver. Daha önce çok sorulmamýþ, ilginç bir soru olsun. Sadece JSON formatýnda cevap ver. JSON anahtarlarý þunlar olsun: soru, a, b, c, d, dogruCevap. ÇOK ÖNEMLÝ: 'dogruCevap' anahtarýnýn karþýsýna SADECE doðru þýkkýn harfini yaz (a, b, c veya d). Baþka açýklama yapma.";
 
         string url = "https://api.groq.com/openai/v1/chat/completions";
@@ -99,25 +94,18 @@ public class GameManager : MonoBehaviour
             try
             {
                 GroqResponse response = JsonUtility.FromJson<GroqResponse>(request.downloadHandler.text);
-
                 if (response != null && response.choices != null && response.choices.Length > 0)
                 {
-                    string yapayZekaMetni = response.choices[0].message.content;
-                    yapayZekaMetni = yapayZekaMetni.Replace("```json", "").Replace("```", "").Trim();
-
+                    string yapayZekaMetni = response.choices[0].message.content.Replace("```json", "").Replace("```", "").Trim();
                     SoruVerisi yeniSoru = JsonUtility.FromJson<SoruVerisi>(yapayZekaMetni);
 
                     gecerliDogruCevap = yeniSoru.dogruCevap.ToLower().Trim();
-                    if (gecerliDogruCevap.Length > 1)
-                    {
-                        gecerliDogruCevap = gecerliDogruCevap.Substring(0, 1);
-                    }
+                    if (gecerliDogruCevap.Length > 1) gecerliDogruCevap = gecerliDogruCevap.Substring(0, 1);
 
-                    Debug.Log("--- " + soruSirasi + ". SORU GELDÝ ---");
-                    Debug.Log("Zorluk: " + zorlukDerecesi + " | Kategori: " + rastgeleKategori + " | Doðru Cevap: [" + gecerliDogruCevap + "]");
+                    // Soruyu hafýzaya alýyoruz ki joker yazýlarýyla çakýþmasýn
+                    aktifSoruMetni = "SORU " + soruSirasi + ":\n" + yeniSoru.soru;
+                    SoruText.text = aktifSoruMetni;
 
-                    // Ekrana kaçýncý soruda olduðunu yazdýrýyoruz
-                    SoruText.text = "SORU " + soruSirasi + ":\n" + yeniSoru.soru;
                     SecenekTexts[0].text = "A) " + yeniSoru.a;
                     SecenekTexts[1].text = "B) " + yeniSoru.b;
                     SecenekTexts[2].text = "C) " + yeniSoru.c;
@@ -126,35 +114,99 @@ public class GameManager : MonoBehaviour
                     foreach (Button btn in SecenekBtns) btn.interactable = true;
                 }
             }
-            catch (System.Exception e)
-            {
-                SoruText.text = "Soru geldi ama okunamadý.";
-            }
+            catch { SoruText.text = "Soru formatý bozuk geldi."; }
         }
     }
 
     void ButonlariHazirla()
     {
-        SecenekBtns[0].onClick.AddListener(() => CevapKontrol("a"));
-        SecenekBtns[1].onClick.AddListener(() => CevapKontrol("b"));
-        SecenekBtns[2].onClick.AddListener(() => CevapKontrol("c"));
-        SecenekBtns[3].onClick.AddListener(() => CevapKontrol("d"));
+        SecenekBtns[0].onClick.AddListener(() => CevapKontrol("a", 0));
+        SecenekBtns[1].onClick.AddListener(() => CevapKontrol("b", 1));
+        SecenekBtns[2].onClick.AddListener(() => CevapKontrol("c", 2));
+        SecenekBtns[3].onClick.AddListener(() => CevapKontrol("d", 3));
+
+        Joker50_Btn.onClick.AddListener(Joker50Kullan);
+        ciftcevapBtn.onClick.AddListener(JokerCiftCevapKullan);
+        seyirciBtn.onClick.AddListener(JokerSeyirciKullan);
     }
 
-    public void CevapKontrol(string secilenSik)
+    public void CevapKontrol(string secilenSik, int butonIndex)
     {
         if (secilenSik == gecerliDogruCevap)
         {
-            // Eðer cevap doðruysa, soru sýrasýný 1 arttýrýyoruz!
+            ciftCevapHakkiAktif = false;
             soruSirasi++;
-            SoruText.text = "DOÐRU! Sýradaki soru hazýrlanýyor...";
+            SoruText.text = aktifSoruMetni + "\n\n<color=green>DOÐRU BÝLDÝN! Sýradaki soru hazýrlanýyor...</color>";
             YeniSoruGetir();
         }
         else
         {
-            // Yanlýþ cevap verirse elenir
-            SoruText.text = "YANLIÞ CEVAP! Maalesef elendin.";
-            foreach (Button btn in SecenekBtns) btn.interactable = false;
+            if (ciftCevapHakkiAktif)
+            {
+                ciftCevapHakkiAktif = false; // Kalkan bir kere kýrýldý
+                SecenekBtns[butonIndex].interactable = false; // Týkladýðý o yanlýþ butonu kilitliyoruz
+
+                // Oyuncuya kalkanýn onu koruduðunu EKRANDA NETÇE GÖSTERÝYORUZ
+                SoruText.text = aktifSoruMetni + "\n\n<color=orange>ÝLK TAHMÝNÝN YANLIÞ! Kalkan seni korudu, kalan 3 þýktan tekrar seçim yap!</color>";
+            }
+            else
+            {
+                SoruText.text = aktifSoruMetni + "\n\n<color=red>YANLIÞ CEVAP! Maalesef elendin.</color>";
+                foreach (Button btn in SecenekBtns) btn.interactable = false;
+            }
         }
+    }
+
+    public void Joker50Kullan()
+    {
+        if (joker50Kullanildi) return;
+        joker50Kullanildi = true;
+        Joker50_Btn.interactable = false;
+
+        int dogruIndex = 0;
+        if (gecerliDogruCevap == "b") dogruIndex = 1;
+        else if (gecerliDogruCevap == "c") dogruIndex = 2;
+        else if (gecerliDogruCevap == "d") dogruIndex = 3;
+
+        List<int> yanlisSiklar = new List<int>();
+        for (int i = 0; i < 4; i++) { if (i != dogruIndex) yanlisSiklar.Add(i); }
+
+        yanlisSiklar.RemoveAt(Random.Range(0, yanlisSiklar.Count));
+
+        foreach (int index in yanlisSiklar)
+        {
+            SecenekTexts[index].text = "";
+            SecenekBtns[index].interactable = false;
+        }
+
+        SoruText.text = aktifSoruMetni + "\n\n<color=yellow>(%50 Jokeri kullanýldý, 2 yanlýþ þýk elendi!)</color>";
+    }
+
+    public void JokerCiftCevapKullan()
+    {
+        if (ciftCevapKullanildi) return;
+        ciftCevapKullanildi = true;
+        ciftcevapBtn.interactable = false;
+
+        ciftCevapHakkiAktif = true;
+        SoruText.text = aktifSoruMetni + "\n\n<color=yellow>ÇÝFT CEVAP AKTÝF! 2 Tahmin hakkýn var, bir þýk seç.</color>";
+    }
+
+    public void JokerSeyirciKullan()
+    {
+        if (seyirciKullanildi) return;
+        seyirciKullanildi = true;
+        seyirciBtn.interactable = false;
+
+        string tavsiye = gecerliDogruCevap.ToUpper();
+        int sans = Random.Range(1, 101);
+        if (sans > 85)
+        {
+            string[] tumSiklar = { "A", "B", "C", "D" };
+            do { tavsiye = tumSiklar[Random.Range(0, 4)]; }
+            while (tavsiye.ToLower() == gecerliDogruCevap);
+        }
+
+        SoruText.text = aktifSoruMetni + $"\n\n<color=yellow>(Seyircilerin %81'i '{tavsiye}' þýkkýný seçti!)</color>";
     }
 }
