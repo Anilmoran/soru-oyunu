@@ -4,6 +4,7 @@ using UnityEngine;
 using UnityEngine.Networking;
 using TMPro;
 using UnityEngine.UI;
+using UnityEngine.SceneManagement; // SAHNE DEÐÝÞTÝRMEK ÝÇÝN EKLENDÝ
 
 [System.Serializable]
 public class SoruVerisi { public string soru; public string a; public string b; public string c; public string d; public string dogruCevap; }
@@ -24,11 +25,18 @@ public class GameManager : MonoBehaviour
     public Button ciftcevapBtn;
     public Button seyirciBtn;
 
+    [Header("Oyun Sonu Paneli")]
+    public GameObject KazandiPaneli;
+    public TextMeshProUGUI SiralamaText;
+    public Button AnaMenu_Btn;
+    public Button LobiyeDon_Btn;
+    public Button OyundanCik_Btn;
+
     // GROQ ÞÝFRENÝ BURAYA YAPIÞTIR!
     private string apiKey = "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";
 
     private string gecerliDogruCevap = "";
-    private string aktifSoruMetni = ""; // Soruyu hafýzada tutmak için ekledik
+    private string aktifSoruMetni = "";
     private int soruSirasi = 1;
     private string[] kategoriler = { "Tarih", "Coðrafya", "Uzay Bilimi", "Sinema", "Spor", "Müzik", "Teknoloji", "Biyoloji", "Sanat Tarihi", "Edebiyat" };
 
@@ -39,6 +47,9 @@ public class GameManager : MonoBehaviour
 
     void Start()
     {
+        // Oyun baþlarken panel kapalý olsun
+        if (KazandiPaneli != null) KazandiPaneli.SetActive(false);
+
         ButonlariHazirla();
         soruSirasi = 1;
         YeniSoruGetir();
@@ -46,10 +57,10 @@ public class GameManager : MonoBehaviour
 
     public void YeniSoruGetir()
     {
-        if (soruSirasi > 10)
+        // Soru sayýsýný 15'e çýkardýk
+        if (soruSirasi > 15)
         {
-            SoruText.text = "<color=green>?? ÝNANILMAZ! 10 SORUYU DA BÝLDÝN VE KAZANDIN! ??</color>";
-            foreach (Button btn in SecenekBtns) btn.interactable = false;
+            OyunBittiPaneliniAc();
             return;
         }
 
@@ -102,7 +113,6 @@ public class GameManager : MonoBehaviour
                     gecerliDogruCevap = yeniSoru.dogruCevap.ToLower().Trim();
                     if (gecerliDogruCevap.Length > 1) gecerliDogruCevap = gecerliDogruCevap.Substring(0, 1);
 
-                    // Soruyu hafýzaya alýyoruz ki joker yazýlarýyla çakýþmasýn
                     aktifSoruMetni = "SORU " + soruSirasi + ":\n" + yeniSoru.soru;
                     SoruText.text = aktifSoruMetni;
 
@@ -128,12 +138,19 @@ public class GameManager : MonoBehaviour
         Joker50_Btn.onClick.AddListener(Joker50Kullan);
         ciftcevapBtn.onClick.AddListener(JokerCiftCevapKullan);
         seyirciBtn.onClick.AddListener(JokerSeyirciKullan);
+
+        // OYUN SONU BUTONLARI
+        if (AnaMenu_Btn != null) AnaMenu_Btn.onClick.AddListener(AnaMenuyeGit);
+        if (OyundanCik_Btn != null) OyundanCik_Btn.onClick.AddListener(OyundanCik);
+        if (LobiyeDon_Btn != null) LobiyeDon_Btn.onClick.AddListener(LobiyeGit);
     }
 
     public void CevapKontrol(string secilenSik, int butonIndex)
     {
         if (secilenSik == gecerliDogruCevap)
         {
+            if (AudioManager.Instance != null) AudioManager.Instance.DogruSesiCal();
+
             ciftCevapHakkiAktif = false;
             soruSirasi++;
             SoruText.text = aktifSoruMetni + "\n\n<color=green>DOÐRU BÝLDÝN! Sýradaki soru hazýrlanýyor...</color>";
@@ -141,18 +158,21 @@ public class GameManager : MonoBehaviour
         }
         else
         {
+            if (AudioManager.Instance != null) AudioManager.Instance.YanlisSesiCal();
+
             if (ciftCevapHakkiAktif)
             {
-                ciftCevapHakkiAktif = false; // Kalkan bir kere kýrýldý
-                SecenekBtns[butonIndex].interactable = false; // Týkladýðý o yanlýþ butonu kilitliyoruz
-
-                // Oyuncuya kalkanýn onu koruduðunu EKRANDA NETÇE GÖSTERÝYORUZ
+                ciftCevapHakkiAktif = false;
+                SecenekBtns[butonIndex].interactable = false;
                 SoruText.text = aktifSoruMetni + "\n\n<color=orange>ÝLK TAHMÝNÝN YANLIÞ! Kalkan seni korudu, kalan 3 þýktan tekrar seçim yap!</color>";
             }
             else
             {
                 SoruText.text = aktifSoruMetni + "\n\n<color=red>YANLIÞ CEVAP! Maalesef elendin.</color>";
                 foreach (Button btn in SecenekBtns) btn.interactable = false;
+
+                // Elenirse 2 saniye sonra DNF panelini aç
+                Invoke("OyunBittiPaneliniAc", 2f);
             }
         }
     }
@@ -162,6 +182,8 @@ public class GameManager : MonoBehaviour
         if (joker50Kullanildi) return;
         joker50Kullanildi = true;
         Joker50_Btn.interactable = false;
+
+        if (AudioManager.Instance != null) AudioManager.Instance.JokerSesiCal();
 
         int dogruIndex = 0;
         if (gecerliDogruCevap == "b") dogruIndex = 1;
@@ -188,6 +210,8 @@ public class GameManager : MonoBehaviour
         ciftCevapKullanildi = true;
         ciftcevapBtn.interactable = false;
 
+        if (AudioManager.Instance != null) AudioManager.Instance.JokerSesiCal();
+
         ciftCevapHakkiAktif = true;
         SoruText.text = aktifSoruMetni + "\n\n<color=yellow>ÇÝFT CEVAP AKTÝF! 2 Tahmin hakkýn var, bir þýk seç.</color>";
     }
@@ -197,6 +221,8 @@ public class GameManager : MonoBehaviour
         if (seyirciKullanildi) return;
         seyirciKullanildi = true;
         seyirciBtn.interactable = false;
+
+        if (AudioManager.Instance != null) AudioManager.Instance.JokerSesiCal();
 
         string tavsiye = gecerliDogruCevap.ToUpper();
         int sans = Random.Range(1, 101);
@@ -208,5 +234,38 @@ public class GameManager : MonoBehaviour
         }
 
         SoruText.text = aktifSoruMetni + $"\n\n<color=yellow>(Seyircilerin %81'i '{tavsiye}' þýkkýný seçti!)</color>";
+    }
+
+    // --- YENÝ EKLENEN OYUN SONU FONKSÝYONLARI ---
+    public void OyunBittiPaneliniAc()
+    {
+        if (KazandiPaneli != null) KazandiPaneli.SetActive(true);
+
+        if (soruSirasi > 15)
+        {
+            if (AudioManager.Instance != null) AudioManager.Instance.DogruSesiCal();
+            // BURAYA ÝLERÝDE MULTIPLAYER SKOR KODLARI GELECEK
+            if (SiralamaText != null) SiralamaText.text = "TEBRÝKLER! 15 SORUYU TAMAMLADIN!\n(Sýralama Multiplayer eklenince buraya gelecek)";
+        }
+        else
+        {
+            if (SiralamaText != null) SiralamaText.text = "<color=red>ELENDÝN!</color>\nDurum: DNF (Bitiremedi)";
+        }
+    }
+
+    public void AnaMenuyeGit()
+    {
+        SceneManager.LoadScene("menu");
+    }
+
+    public void OyundanCik()
+    {
+        Debug.Log("Oyundan çýkýldý.");
+        Application.Quit();
+    }
+
+    public void LobiyeGit()
+    {
+        SceneManager.LoadScene("menu");
     }
 }
