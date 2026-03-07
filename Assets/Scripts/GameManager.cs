@@ -33,7 +33,7 @@ public class GameManager : MonoBehaviour
     public Button OyundanCik_Btn;
 
     // GROQ ÞÝFRENÝ BURAYA YAPIÞTIR!
-    private string apiKey = "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";
+    private string apiKey = "";
 
     private string gecerliDogruCevap = "";
     private string aktifSoruMetni = "";
