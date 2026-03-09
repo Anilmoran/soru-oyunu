@@ -9,6 +9,9 @@ using TMPro;
 using UnityEngine.UI;
 using Unity.Collections;
 
+// PARRELSYNC ÝÇÝN ÝSÝM HAFIZASI (Pencereler arasý asla karýþmaz)
+public static class OyuncuBilgisi { public static string Ad = "Oyuncu"; }
+
 public class RelayManager : NetworkBehaviour
 {
     [Header("1. Aþama: Baðlantý Arayüzü")]
@@ -31,14 +34,8 @@ public class RelayManager : NetworkBehaviour
 
     async void Start()
     {
-        // 1. HAYAT KURTARAN KONTROL (Boþ kutu varsa kod çökmesin diye uyarýr)
-        if (OdaKurButonu == null || KatilButonu == null || DurumYazisi == null)
-        {
-            Debug.LogError("!!! DÝKKAT !!! INSPECTOR'DA BUTONLAR VEYA DURUM YAZISI BOÞ BIRAKILMIÞ! LÜTFEN O OBJELERÝ SÜRÜKLEYÝN!");
-            return;
-        }
+        if (OdaKurButonu == null || KatilButonu == null || DurumYazisi == null) return;
 
-        // BAÞLANGIÇTA BUTONLARI KÝLÝTLE (Bulut hazýr olmadan týklayamazsýn)
         OdaKurButonu.interactable = false;
         KatilButonu.interactable = false;
 
@@ -50,7 +47,6 @@ public class RelayManager : NetworkBehaviour
 
         try
         {
-            // PARRELSYNC ÇAKIÞMASINI ÖNLER VE BULUTU BAÞLATIR
             if (UnityServices.State == ServicesInitializationState.Uninitialized)
             {
                 InitializationOptions options = new InitializationOptions();
@@ -63,14 +59,13 @@ public class RelayManager : NetworkBehaviour
                 await AuthenticationService.Instance.SignInAnonymouslyAsync();
             }
 
-            // BULUT BAÞARIYLA BAÞLADIYSA KÝLÝTLERÝ AÇ
             DurumYazisi.text = "Baglanti Hazir! Kullanici adini gir ve oyuna basla.";
             OdaKurButonu.interactable = true;
             KatilButonu.interactable = true;
         }
         catch (System.Exception e)
         {
-            DurumYazisi.text = "<color=red>Bulut Hatasý! Ýnternetinizi veya Project Settings'i kontrol edin.</color>";
+            DurumYazisi.text = "<color=red>Bulut Hatasý! Ýnternetinizi kontrol edin.</color>";
             Debug.LogError("BULUT SÝSTEMÝ BAÞLATILAMADI: " + e);
         }
     }
@@ -102,12 +97,7 @@ public class RelayManager : NetworkBehaviour
 
     public async void OdaKur()
     {
-        // 2. HAYAT KURTARAN KONTROL (Hala bulut baþlamadýysa butona basmaný engeller)
-        if (UnityServices.State != ServicesInitializationState.Initialized)
-        {
-            if (DurumYazisi != null) DurumYazisi.text = "<color=red>HATA: Unity Sunucularý Hazýr Deðil!</color>";
-            return;
-        }
+        if (UnityServices.State != ServicesInitializationState.Initialized) return;
 
         if (KullaniciAdiUyariYazisi != null) KullaniciAdiUyariYazisi.text = "";
         string safKullaniciAdi = KullaniciAdiGirisAlani != null ? KullaniciAdiGirisAlani.text.Replace("\u200B", "").Trim() : "Kurucu";
@@ -117,6 +107,9 @@ public class RelayManager : NetworkBehaviour
             if (KullaniciAdiUyariYazisi != null) KullaniciAdiUyariYazisi.text = "<color=red>Lütfen bir kullanýcý adý girin!</color>";
             return;
         }
+
+        // ÝSMÝ RAM'E KAYDET (GameManager buradan çekecek)
+        OyuncuBilgisi.Ad = safKullaniciAdi;
 
         if (OdaKurButonu != null) OdaKurButonu.interactable = false;
         if (DurumYazisi != null) DurumYazisi.text = "Oda Kuruluyor...";
@@ -144,11 +137,7 @@ public class RelayManager : NetworkBehaviour
 
     public async void OdayaKatil()
     {
-        if (UnityServices.State != ServicesInitializationState.Initialized)
-        {
-            if (DurumYazisi != null) DurumYazisi.text = "<color=red>HATA: Unity Sunucularý Hazýr Deðil!</color>";
-            return;
-        }
+        if (UnityServices.State != ServicesInitializationState.Initialized) return;
 
         if (KullaniciAdiUyariYazisi != null) KullaniciAdiUyariYazisi.text = "";
         string safKullaniciAdi = KullaniciAdiGirisAlani != null ? KullaniciAdiGirisAlani.text.Replace("\u200B", "").Trim() : "Oyuncu";
@@ -164,6 +153,9 @@ public class RelayManager : NetworkBehaviour
             if (DurumYazisi != null) DurumYazisi.text = "<color=red>Hata: Lütfen oda þifresini girin!</color>";
             return;
         }
+
+        // ÝSMÝ RAM'E KAYDET
+        OyuncuBilgisi.Ad = safKullaniciAdi;
 
         if (OdaKurButonu != null) OdaKurButonu.interactable = false;
         if (KatilButonu != null) KatilButonu.interactable = false;
@@ -182,7 +174,7 @@ public class RelayManager : NetworkBehaviour
 
             LobiyeGecisYap("<color=green>Odaya Baþarýyla Katýldýn!</color>\nKurucu bekleniyor...", false);
         }
-        catch (RelayServiceException e)
+        catch (RelayServiceException)
         {
             if (DurumYazisi != null) DurumYazisi.text = "<color=red>Hata: Yanlýþ Þifre veya Oda Dolu!</color>";
             if (OdaKurButonu != null) OdaKurButonu.interactable = true;

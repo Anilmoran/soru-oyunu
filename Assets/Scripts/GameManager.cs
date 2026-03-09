@@ -4,7 +4,10 @@ using UnityEngine;
 using UnityEngine.Networking;
 using TMPro;
 using UnityEngine.UI;
-using UnityEngine.SceneManagement; // SAHNE DEÐÝÞTÝRMEK ÝÇÝN EKLENDÝ
+using UnityEngine.SceneManagement;
+using Unity.Netcode;
+using Unity.Collections;
+using System.Linq;
 
 [System.Serializable]
 public class SoruVerisi { public string soru; public string a; public string b; public string c; public string d; public string dogruCevap; }
@@ -13,8 +16,10 @@ public class SoruVerisi { public string soru; public string a; public string b; 
 [System.Serializable] public class Choice { public Message message; }
 [System.Serializable] public class Message { public string content; }
 
-public class GameManager : MonoBehaviour
+public class GameManager : NetworkBehaviour
 {
+    public static GameManager Instance;
+
     [Header("Soru ve Þýklar")]
     public TextMeshProUGUI SoruText;
     public TextMeshProUGUI[] SecenekTexts;
@@ -45,9 +50,26 @@ public class GameManager : MonoBehaviour
     private bool seyirciKullanildi = false;
     private bool ciftCevapHakkiAktif = false;
 
+    // --- MULTIPLAYER SKOR DEÐÝÞKENLERÝ ---
+    private string benimAdim = "Oyuncu";
+    private string kisiselDurumMetni = "";
+
+    public NetworkVariable<FixedString4096Bytes> OrtakSkorTablosu = new NetworkVariable<FixedString4096Bytes>(
+        "Sýralama Yükleniyor...", NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
+
+    private struct SkorVerisi { public string isim; public int soru; public bool elendi; }
+    private Dictionary<ulong, SkorVerisi> sunucuSkorlari = new Dictionary<ulong, SkorVerisi>();
+
+    void Awake()
+    {
+        Instance = this;
+    }
+
     void Start()
     {
-        // Oyun baþlarken panel kapalý olsun
+        // ÝSMÝ RELAYMANAGER'IN RAM HAFIZASINDAN ÇEK (ParrelSync Karýþmaz)
+        benimAdim = OyuncuBilgisi.Ad;
+
         if (KazandiPaneli != null) KazandiPaneli.SetActive(false);
 
         ButonlariHazirla();
@@ -55,11 +77,61 @@ public class GameManager : MonoBehaviour
         YeniSoruGetir();
     }
 
+    public override void OnNetworkSpawn()
+    {
+        OrtakSkorTablosu.OnValueChanged += (eski, yeni) => {
+            GorselTabloyuGuncelle();
+        };
+
+        SkorBildirServerRpc(benimAdim, soruSirasi, false);
+    }
+
+    [ServerRpc(RequireOwnership = false)]
+    public void SkorBildirServerRpc(string isim, int soru, bool elendi, ServerRpcParams rpcParams = default)
+    {
+        ulong clientId = rpcParams.Receive.SenderClientId;
+        sunucuSkorlari[clientId] = new SkorVerisi { isim = isim, soru = soru, elendi = elendi };
+        TabloyuOlustur();
+    }
+
+    private void TabloyuOlustur()
+    {
+        if (!IsServer) return;
+
+        var siraliListe = sunucuSkorlari.Values
+            .OrderBy(x => x.elendi)
+            .ThenByDescending(x => x.soru)
+            .ToList();
+
+        string tabloMetni = "";
+        for (int i = 0; i < siraliListe.Count; i++)
+        {
+            var s = siraliListe[i];
+            string durum = "";
+
+            if (s.elendi) durum = $"<color=red>DNF ({s.soru}. Soru)</color>";
+            else if (s.soru > 15) durum = "<color=yellow>KAZANDI!</color>";
+            else durum = $"<color=green>{s.soru}. Soruda</color>";
+
+            tabloMetni += $"{i + 1}. {s.isim} - {durum}\n";
+        }
+
+        OrtakSkorTablosu.Value = tabloMetni;
+    }
+
+    public void GorselTabloyuGuncelle()
+    {
+        if (SiralamaText != null && KazandiPaneli != null && KazandiPaneli.activeSelf)
+        {
+            SiralamaText.text = kisiselDurumMetni + "\n\n<color=white>--- LÝDERLÝK TABLOSU ---</color>\n" + OrtakSkorTablosu.Value.ToString();
+        }
+    }
+
     public void YeniSoruGetir()
     {
-        // Soru sayýsýný 15'e çýkardýk
         if (soruSirasi > 15)
         {
+            SkorBildirServerRpc(benimAdim, soruSirasi, false);
             OyunBittiPaneliniAc();
             return;
         }
@@ -70,6 +142,8 @@ public class GameManager : MonoBehaviour
 
         foreach (Button btn in SecenekBtns) btn.interactable = false;
         foreach (TextMeshProUGUI txt in SecenekTexts) txt.text = "...";
+
+        if (SoruManager.Instance != null) SoruManager.Instance.SuresiDurdur();
 
         StartCoroutine(YapayZekadanSoruCek());
     }
@@ -122,6 +196,8 @@ public class GameManager : MonoBehaviour
                     SecenekTexts[3].text = "D) " + yeniSoru.d;
 
                     foreach (Button btn in SecenekBtns) btn.interactable = true;
+
+                    if (SoruManager.Instance != null) SoruManager.Instance.SuresiBaslat();
                 }
             }
             catch { SoruText.text = "Soru formatý bozuk geldi."; }
@@ -139,7 +215,6 @@ public class GameManager : MonoBehaviour
         ciftcevapBtn.onClick.AddListener(JokerCiftCevapKullan);
         seyirciBtn.onClick.AddListener(JokerSeyirciKullan);
 
-        // OYUN SONU BUTONLARI
         if (AnaMenu_Btn != null) AnaMenu_Btn.onClick.AddListener(AnaMenuyeGit);
         if (OyundanCik_Btn != null) OyundanCik_Btn.onClick.AddListener(OyundanCik);
         if (LobiyeDon_Btn != null) LobiyeDon_Btn.onClick.AddListener(LobiyeGit);
@@ -149,10 +224,13 @@ public class GameManager : MonoBehaviour
     {
         if (secilenSik == gecerliDogruCevap)
         {
+            if (SoruManager.Instance != null) SoruManager.Instance.SuresiDurdur();
             if (AudioManager.Instance != null) AudioManager.Instance.DogruSesiCal();
 
             ciftCevapHakkiAktif = false;
             soruSirasi++;
+            SkorBildirServerRpc(benimAdim, soruSirasi, false);
+
             SoruText.text = aktifSoruMetni + "\n\n<color=green>DOÐRU BÝLDÝN! Sýradaki soru hazýrlanýyor...</color>";
             YeniSoruGetir();
         }
@@ -164,19 +242,35 @@ public class GameManager : MonoBehaviour
             {
                 ciftCevapHakkiAktif = false;
                 SecenekBtns[butonIndex].interactable = false;
-                SoruText.text = aktifSoruMetni + "\n\n<color=orange>ÝLK TAHMÝNÝN YANLIÞ! Kalkan seni korudu, kalan 3 þýktan tekrar seçim yap!</color>";
+                SoruText.text = aktifSoruMetni + "\n\n<color=orange>ÝLK TAHMÝNÝN YANLIÞ! Kalkan seni korudu!</color>";
             }
             else
             {
+                if (SoruManager.Instance != null) SoruManager.Instance.SuresiDurdur();
+
+                SkorBildirServerRpc(benimAdim, soruSirasi, true);
+
                 SoruText.text = aktifSoruMetni + "\n\n<color=red>YANLIÞ CEVAP! Maalesef elendin.</color>";
                 foreach (Button btn in SecenekBtns) btn.interactable = false;
 
-                // Elenirse 2 saniye sonra DNF panelini aç
                 Invoke("OyunBittiPaneliniAc", 2f);
             }
         }
     }
 
+    public void SureBittiElendi()
+    {
+        if (AudioManager.Instance != null) AudioManager.Instance.YanlisSesiCal();
+
+        SkorBildirServerRpc(benimAdim, soruSirasi, true);
+
+        SoruText.text = aktifSoruMetni + "\n\n<color=red>SÜRE BÝTTÝ! Maalesef elendin.</color>";
+        foreach (Button btn in SecenekBtns) btn.interactable = false;
+
+        Invoke("OyunBittiPaneliniAc", 2f);
+    }
+
+    // --- EKSÝK JOKERLER BURADA GERÝ GELDÝ ---
     public void Joker50Kullan()
     {
         if (joker50Kullanildi) return;
@@ -236,7 +330,6 @@ public class GameManager : MonoBehaviour
         SoruText.text = aktifSoruMetni + $"\n\n<color=yellow>(Seyircilerin %81'i '{tavsiye}' þýkkýný seçti!)</color>";
     }
 
-    // --- YENÝ EKLENEN OYUN SONU FONKSÝYONLARI ---
     public void OyunBittiPaneliniAc()
     {
         if (KazandiPaneli != null) KazandiPaneli.SetActive(true);
@@ -244,28 +337,30 @@ public class GameManager : MonoBehaviour
         if (soruSirasi > 15)
         {
             if (AudioManager.Instance != null) AudioManager.Instance.DogruSesiCal();
-            // BURAYA ÝLERÝDE MULTIPLAYER SKOR KODLARI GELECEK
-            if (SiralamaText != null) SiralamaText.text = "TEBRÝKLER! 15 SORUYU TAMAMLADIN!\n(Sýralama Multiplayer eklenince buraya gelecek)";
+            kisiselDurumMetni = "<color=yellow>TEBRÝKLER! OYUNU TAMAMLADIN!</color>";
         }
         else
         {
-            if (SiralamaText != null) SiralamaText.text = "<color=red>ELENDÝN!</color>\nDurum: DNF (Bitiremedi)";
+            kisiselDurumMetni = $"<color=red>ELENDÝN!</color>\nDurum: DNF (Ulaþýlan Soru: {soruSirasi})";
         }
+
+        GorselTabloyuGuncelle();
     }
 
     public void AnaMenuyeGit()
     {
+        if (NetworkManager.Singleton != null) NetworkManager.Singleton.Shutdown();
         SceneManager.LoadScene("menu");
     }
 
     public void OyundanCik()
     {
-        Debug.Log("Oyundan çýkýldý.");
         Application.Quit();
     }
 
     public void LobiyeGit()
     {
+        if (NetworkManager.Singleton != null) NetworkManager.Singleton.Shutdown();
         SceneManager.LoadScene("menu");
     }
 }

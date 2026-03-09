@@ -6,17 +6,20 @@ public class AudioManager : MonoBehaviour
 
     public AudioSource MuzikKaynagi;
     public AudioSource EfektKaynagi;
-    public AudioSource TikTakKaynagi;
+    public AudioSource TikTakKaynagi; // Geri sayým ses kaynaðý
 
     public AudioClip SahneMuzigi;
     public AudioClip ButonHoverSesi;
     public AudioClip ButonClickSesi;
-    public AudioClip TikTakSesi;
+
+    [Header("Süre Sesleri")]
+    public AudioClip TikTakSesi;       // Senin 25 saniyelik normal sesin
+    public AudioClip TikTakHizliSesi;  // YENÝ EKLENEN 10 saniyelik hýzlý ses
 
     [Header("Cevap ve Joker Sesleri")]
     public AudioClip DogruCevapSesi;
     public AudioClip YanlisCevapSesi;
-    public AudioClip JokerSesi; // YENÝ EKLEDÝÐÝMÝZ JOKER SESÝ DEÐÝÞKENÝ
+    public AudioClip JokerSesi;
 
     void Awake()
     {
@@ -35,11 +38,34 @@ public class AudioManager : MonoBehaviour
 
     public void HoverSesiCal() { if (EfektKaynagi != null && ButonHoverSesi != null) EfektKaynagi.PlayOneShot(ButonHoverSesi); }
     public void ClickSesiCal() { if (EfektKaynagi != null && ButonClickSesi != null) EfektKaynagi.PlayOneShot(ButonClickSesi); }
-    public void TikTakCal() { if (TikTakKaynagi != null && TikTakSesi != null) TikTakKaynagi.PlayOneShot(TikTakSesi); }
 
     public void DogruSesiCal() { if (EfektKaynagi != null && DogruCevapSesi != null) EfektKaynagi.PlayOneShot(DogruCevapSesi); }
     public void YanlisSesiCal() { if (EfektKaynagi != null && YanlisCevapSesi != null) EfektKaynagi.PlayOneShot(YanlisCevapSesi); }
-
-    // YENÝ EKLEDÝÐÝMÝZ JOKER ÇALMA FONKSÝYONU
     public void JokerSesiCal() { if (EfektKaynagi != null && JokerSesi != null) EfektKaynagi.PlayOneShot(JokerSesi); }
+
+    // --- YENÝ GERÝ SAYIM SES SÝSTEMÝ ---
+    public void TikTakNormalBaslat()
+    {
+        if (TikTakKaynagi != null && TikTakSesi != null)
+        {
+            TikTakKaynagi.clip = TikTakSesi;
+            TikTakKaynagi.loop = true; // Sesi döngüye alýyoruz (25 saniye bitince kendi baþa saracak)
+            TikTakKaynagi.Play();
+        }
+    }
+
+    public void TikTakHizliBaslat()
+    {
+        if (TikTakKaynagi != null && TikTakHizliSesi != null)
+        {
+            TikTakKaynagi.clip = TikTakHizliSesi;
+            TikTakKaynagi.loop = true;
+            TikTakKaynagi.Play();
+        }
+    }
+
+    public void TikTakDurdur()
+    {
+        if (TikTakKaynagi != null) TikTakKaynagi.Stop();
+    }
 }
